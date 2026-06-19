@@ -1,0 +1,16 @@
+# Don't deploy these to Azure Functions
+.venv/
+.vscode/
+.git/
+.gitignore
+.pytest_cache/
+__pycache__/
+tests/
+infra/
+*.md
+*.toml
+*.lock
+.env
+.env.sample
+deploy.zip
+.python_packages/

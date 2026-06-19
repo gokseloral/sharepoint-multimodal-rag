@@ -1,0 +1,35 @@
+# Environment variables (contains secrets)
+.env
+
+# Bicep parameter file (may contain tenant/subscription IDs, client secrets)
+# Use main.bicepparam.sample as the committed template.
+infra/main.bicepparam
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+deploy.zip
+.python_packages/
+
+# uv
+# NOTE: uv.lock is intentionally committed for reproducible deploys
