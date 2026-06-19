@@ -140,19 +140,23 @@ class DocIntelConfig:
 
 
 @dataclass(frozen=True)
-class ContentUnderstandingConfig:
-    """Azure AI Content Understanding (video analyzer) — optional.
+class SpeechTranscriptionConfig:
+    """Azure AI Speech Fast Transcription — video/audio transcription.
 
-    When set, video files (.mp4, .mov, ...) are analysed by the
-    prebuilt-videoSearch analyzer into transcript + per-segment summary TEXT
-    blocks, which then flow through the same chunk/embed/index path as
-    documents. When empty, video files are skipped.
+    Replaces Azure AI Content Understanding (prebuilt-videoSearch), which is
+    not available in Canada Central.  Reuses the same Foundry / AIServices
+    endpoint set via ``AZURE_OPENAI_ENDPOINT`` — no extra resource needed.
+
+    When ``endpoint`` is set (it defaults to the Azure OpenAI endpoint),
+    video files (.mp4, .mov, …) are transcribed by the Azure Speech Fast
+    Transcription API into timestamped TEXT blocks, which flow through the
+    same chunk/embed/index path as documents.  When empty, video files are
+    skipped.
     """
     endpoint: str = ""
-    analyzer_id: str = "prebuilt-videoSearch"
-    api_version: str = "2025-11-01"
-    poll_interval_seconds: int = 15
-    poll_timeout_seconds: int = 3600
+    locale: str = "en-US"
+    api_version: str = "2024-11-15"
+    segment_seconds: int = 60  # group transcript phrases into N-second windows
 
     @property
     def enabled(self) -> bool:
@@ -247,7 +251,7 @@ class AppConfig:
     search: SearchConfig
     multimodal: MultimodalConfig
     docintel: DocIntelConfig
-    content_understanding: ContentUnderstandingConfig
+    speech_transcription: SpeechTranscriptionConfig
     azure_openai: AzureOpenAIConfig
     metadata_filter: MetadataFilterConfig
     indexer: IndexerConfig
@@ -398,12 +402,11 @@ def load_config() -> AppConfig:
             skip_below_kb=int(_get_optional("DOCINTEL_SKIP_BELOW_KB", "5")),
             max_image_size_mb=int(_get_optional("DOCINTEL_MAX_IMAGE_SIZE_MB", "20")),
         ),
-        content_understanding=ContentUnderstandingConfig(
-            endpoint=_get_optional("CONTENT_UNDERSTANDING_ENDPOINT", ""),
-            analyzer_id=_get_optional("CONTENT_UNDERSTANDING_ANALYZER_ID", "prebuilt-videoSearch"),
-            api_version=_get_optional("CONTENT_UNDERSTANDING_API_VERSION", "2025-11-01"),
-            poll_interval_seconds=int(_get_optional("CONTENT_UNDERSTANDING_POLL_INTERVAL_SECONDS", "15")),
-            poll_timeout_seconds=int(_get_optional("CONTENT_UNDERSTANDING_POLL_TIMEOUT_SECONDS", "3600")),
+        speech_transcription=SpeechTranscriptionConfig(
+            endpoint=azure_openai_ep,  # reuse Foundry/AIServices endpoint
+            locale=_get_optional("SPEECH_LOCALE", "en-US"),
+            api_version=_get_optional("SPEECH_API_VERSION", "2024-11-15"),
+            segment_seconds=int(_get_optional("SPEECH_SEGMENT_SECONDS", "60")),
         ),
         indexer=IndexerConfig(
             indexed_extensions=extensions,

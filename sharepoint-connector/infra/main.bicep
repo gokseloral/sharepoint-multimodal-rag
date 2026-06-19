@@ -48,8 +48,8 @@ param enableSecurityTrimming bool = false
 @description('Optional escape hatch — only relevant when enableSecurityTrimming = true. When empty, the template creates the Entra app registration itself via the Microsoft Graph Bicep extension (deployer needs `Application Administrator`). When non-empty, the template skips creating the app and uses this client ID instead — useful when the deployer lacks Graph privileges and an admin has pre-created the app via infra/create-api-app-registration.ps1. Accepts a bare GUID or an `api://<clientId>` URI.')
 param apiAudience string = ''
 
-@description('Enable video indexing via Azure AI Content Understanding (prebuilt-videoSearch). When true, video files (.mp4/.mov/.avi/.mkv/.wmv/.m4v/.webm) in SharePoint are transcribed and summarised, then indexed alongside documents and images. Requires deploying in a region that supports Content Understanding; the same Foundry account and managed identity are reused. When false (default), video files are skipped.')
-param enableVideoIndexing bool = false
+@description('Locale (BCP-47 language tag) for Azure Speech video transcription. Defaults to en-US. Video files (.mp4/.mov/.avi/.mkv/.wmv/.m4v/.webm) are transcribed via the Azure Speech Fast Transcription API using the same Foundry AIServices account as Azure OpenAI — no extra resource needed and works in Canada Central. To disable video indexing, remove video extensions from INDEXED_EXTENSIONS after deployment.')
+param speechLocale string = 'en-US'
 
 @description('Optional — bring-your-own (BYO) storage account. When empty (default), the template creates a new storage account. When set to a full ARM resource ID (e.g. /subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Storage/storageAccounts/<name>), the template skips creating the main storage account and uses the existing one for AzureWebJobsStorage and the Function App deployment cache. The BYO account MUST already contain these child resources (created out-of-band): blob containers app-package, state, images, backup; queues sp-indexer-q, sp-indexer-q-poison; tables failedFiles, runState, watermark. The deployer also needs User Access Administrator (or Owner) on the resource group of the BYO storage account so role assignments can be created.')
 param existingStorageAccountResourceId string = ''
@@ -747,10 +747,10 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'IMAGES_CONTAINER', value: imagesContainerName }
         { name: 'EXTRACT_IMAGES', value: extractImages ? 'true' : 'false' }
 
-        // Content Understanding (video) — reuses the Foundry account + MI.
-        // Empty endpoint disables video indexing (files are skipped).
-        { name: 'CONTENT_UNDERSTANDING_ENDPOINT', value: enableVideoIndexing ? foundryEndpoint : '' }
-        { name: 'CONTENT_UNDERSTANDING_ANALYZER_ID', value: 'prebuilt-videoSearch' }
+        // Speech Transcription for video files — reuses the Foundry/AIServices
+        // account endpoint above. Works in Canada Central (unlike Content Understanding).
+        // Set SPEECH_LOCALE to the primary spoken language of your video content.
+        { name: 'SPEECH_LOCALE', value: speechLocale }
 
         // Query-time security trimming (/api/search, called from OnKnowledgeRequested topic)
         { name: 'API_AUDIENCE', value: effectiveApiClientId }

@@ -38,7 +38,7 @@ This accelerator aims to overcome the [SharePoint knowledge source](https://lear
 
 Ship a push-model SharePoint → Azure AI Search connector that a Copilot Studio agent can query over a **unified multimodal index** (text + image content in the same vector space), from a **well-defined subset** of a SharePoint site, with **deletion propagation**, **nightly backups**, and **least-privilege Graph access** — all running as a serverless Azure Function.
 
-Azure AI Search's [SharePoint connector (preview)](https://docs.azure.cn/en-us/search/search-howto-index-sharepoint-online) has real limitations: no private endpoint support, no Conditional Access compatibility, no SLA, and limited control over the extraction pipeline. This accelerator is a worked example of how to build a custom push pipeline that gives you all of that control while still using the latest Azure services under the hood (Azure OpenAI `text-embedding-3-large` embeddings + `gpt-4o` image captioning, Document Intelligence Layout, Azure AI Content Understanding for video, Copilot Studio's built-in generative orchestration).
+Azure AI Search's [SharePoint connector (preview)](https://docs.azure.cn/en-us/search/search-howto-index-sharepoint-online) has real limitations: no private endpoint support, no Conditional Access compatibility, no SLA, and limited control over the extraction pipeline. This accelerator is a worked example of how to build a custom push pipeline that gives you all of that control while still using the latest Azure services under the hood (Azure OpenAI `text-embedding-3-large` embeddings + `gpt-4o` image captioning, Document Intelligence Layout, Copilot Studio's built-in generative orchestration).
 
 ---
 
@@ -48,12 +48,13 @@ Use cases this accelerator is designed to enable:
 
 1. **Grounded Copilot Studio agents over SharePoint content.** A generative-orchestration agent answers employee questions using the most recent SharePoint documents, with citations back to the source files.
 2. **Multimodal retrieval.** Text queries find images too. A question about "our Q3 revenue chart" surfaces the slide containing the chart, not just text that mentions Q3.
-3. **Video understanding (merged Video RAG capability).** Video files (`.mp4`, `.mov`, `.avi`, `.mkv`, `.wmv`, `.m4v`, `.webm`) are analysed by Azure AI Content Understanding (`prebuilt-videoSearch`) into per-segment transcripts and summaries, then chunked, embedded, and indexed alongside documents and images. A question about a training video surfaces the relevant moment with its transcript. Enable with `enableVideoIndexing=true` (Bicep) or the `CONTENT_UNDERSTANDING_ENDPOINT` app setting.
-4. **Visio diagram search.** Visio files (`.vsdx`, and `.vsd` when LibreOffice is available) have their on-canvas shape and stencil labels extracted with the Python standard library (no third-party package), so flowcharts and network diagrams become searchable by their labels alongside other documents.
-5. **Scoped monitoring.** Point the indexer at a specific site OR a specific folder within a site's library, so one connector instance watches one team's content without touching the rest of the tenant.
-6. **Near-real-time deletion propagation.** When a file is deleted in SharePoint, its chunks leave the index on the next indexer run — no manual cleanup.
+3. **Visio diagram search.** Visio files (`.vsdx`, and `.vsd` when LibreOffice is available) have their on-canvas shape and stencil labels extracted with the Python standard library (no third-party package), so flowcharts and network diagrams become searchable by their labels alongside other documents.
+4. **Scoped monitoring.** Point the indexer at a specific site OR a specific folder within a site's library, so one connector instance watches one team's content without touching the rest of the tenant.
+5. **Near-real-time deletion propagation.** When a file is deleted in SharePoint, its chunks leave the index on the next indexer run — no manual cleanup.
 
-7. **Metadata column filter.** Set `METADATA_FILTERS=DocumentStatusTX=Approved` (comma-separated `column=value` pairs; AND logic; case-insensitive) so only files whose SharePoint column values match are dispatched for indexing. Files that don't match are skipped before any download, embedding, or index write. Works in both full-listing and delta modes. Useful for libraries that use approval workflows — only publish content that has been formally approved.
+6. **Metadata column filter.** Set `METADATA_FILTERS=DocumentStatusTX=Approved` (comma-separated `column=value` pairs; AND logic; case-insensitive) so only files whose SharePoint column values match are dispatched for indexing. Files that don't match are skipped before any download, embedding, or index write. Works in both full-listing and delta modes. Useful for libraries that use approval workflows — only publish content that has been formally approved.
+
+7. **Video transcription.** Video files (`.mp4`, `.mov`, `.avi`, `.mkv`, `.wmv`, `.m4v`, `.webm`) are transcribed via **Azure Speech Fast Transcription API** using the same Foundry AIServices account as Azure OpenAI — no separate resource needed, and available in Canada Central. [PyAV](https://pyav.org/) extracts a 16 kHz mono WAV from the video in-memory; a single synchronous POST returns timestamped phrase-level results, which are grouped into `~60 s` text blocks with `[MM:SS–MM:SS]` timestamps and embedded alongside documents.
 
 Additional feature extensions like **Per-user security trimming** are shared under [Extension Guide](#extension-guide).
 
@@ -61,16 +62,14 @@ Additional feature extensions like **Per-user security trimming** are shared und
 
 ## Architecture Diagram
 
-![SharePoint Connector Architecture](images/sharepoint-connector-architecture.png)
+![SharePoint Connector Architecture](images/sick-kids-ppagent-solution-architecture.png)
 
-Editable sources (open in [draw.io](https://app.diagrams.net) or the VS Code Draw.io extension):
-- [images/sharepoint-connector-architecture-updated.drawio](images/sharepoint-connector-architecture-updated.drawio) — **current** diagram reflecting Azure OpenAI embeddings, Visio/Video support, and the Metadata Column Filter.
-- [images/sharepoint-connector-architecture.drawio](images/sharepoint-connector-architecture.drawio) — original diagram (Florence/Vision multimodal, kept for reference).
-- [images/sharepoint-connector-architecture-with-security-trimming.drawio](images/sharepoint-connector-architecture-with-security-trimming.drawio) — extended diagram showing per-user security trimming.
+Editable source (open in [draw.io](https://app.diagrams.net) or the VS Code Draw.io extension):
+- [images/sharepoint-connector-architecture-updated.drawio](images/sharepoint-connector-architecture-updated.drawio) — **current** diagram reflecting Azure OpenAI embeddings, Visio support, Azure Speech Fast Transcription for video, and the Metadata Column Filter.
 
-**Flow at a glance (default deployment).** The dispatcher (timer) asks SharePoint (via Graph `/delta`) what's changed, applies the configured **metadata column filter** (`METADATA_FILTERS`), enqueues one message per matching file onto Storage Queue, and advances the per-drive delta token. Queue workers scale out: each pulls a message, streams the file to tempfile, routes by file type — video files through Azure AI Content Understanding (`prebuilt-videoSearch`) into transcript + summary text, Visio `.vsdx` files through a ZIP-based XML extractor (`.vsd` via LibreOffice), documents through Document Intelligence Layout (if enabled) or the fallback extractors, standalone images captioned by **`gpt-4o`** — all text chunks are then embedded via **Azure OpenAI `text-embedding-3-large` (3072d)**, image crops uploaded to blob for citation thumbnails, and chunks (with `permission_ids`) pushed into the AI Search index. A Copilot Studio agent then queries that index directly via the **built-in Azure AI Search Knowledge Source** connector — the registered `azureOpenAI` vectorizer embeds queries server-side using `text-embedding-3-large` — vector + keyword + semantic ranker, no client-side embedding code — and grounds its responses on the retrieved chunks.
+**Flow at a glance (default deployment).** The dispatcher (timer) asks SharePoint (via Graph `/delta`) what's changed, applies the configured **metadata column filter** (`METADATA_FILTERS`), enqueues one message per matching file onto Storage Queue, and advances the per-drive delta token. Queue workers scale out: each pulls a message, streams the file to tempfile, routes by file type — Visio `.vsdx` files through a ZIP-based XML extractor (`.vsd` via LibreOffice), documents through Document Intelligence Layout (if enabled) or the fallback extractors, standalone images captioned by **`gpt-4o`**, video files transcribed by **Azure Speech Fast Transcription** (PyAV extracts audio in-memory; a single synchronous REST call returns timestamped transcripts, grouped into `~60 s` blocks) — all text chunks are then embedded via **Azure OpenAI `text-embedding-3-large` (3072d)**, image crops uploaded to blob for citation thumbnails, and chunks (with `permission_ids`) pushed into the AI Search index. A Copilot Studio agent then queries that index directly via the **built-in Azure AI Search Knowledge Source** connector — the registered `azureOpenAI` vectorizer embeds queries server-side using `text-embedding-3-large` — vector + keyword + semantic ranker, no client-side embedding code — and grounds its responses on the retrieved chunks.
 
-> **Per-user security trimming is NOT enabled by default.** Every authenticated user of the agent sees every chunk in the index. To enforce SharePoint ACLs at query time (so users only see citations from documents they actually have access to), follow **[Extending with Per-User Security Trimming](#extending-with-per-user-security-trimming)** at the end of this document — that opt-in adds an `/api/search` Function App endpoint, an Entra app registration, and a Power Platform connection, and replaces the direct AI Search → Copilot Studio link with an HTTP action that flows the signed-in user's delegated token. The extended architecture diagram is at [images/sharepoint-connector-architecture-with-security-trimming.drawio](images/sharepoint-connector-architecture-with-security-trimming.drawio).
+> **Per-user security trimming is NOT enabled by default.** Every authenticated user of the agent sees every chunk in the index. To enforce SharePoint ACLs at query time (so users only see citations from documents they actually have access to), follow **[Extending with Per-User Security Trimming](#extending-with-per-user-security-trimming)** at the end of this document — that opt-in adds an `/api/search` Function App endpoint, an Entra app registration, and a Power Platform connection, and replaces the direct AI Search → Copilot Studio link with an HTTP action that flows the signed-in user's delegated token.
 
 ---
 
@@ -102,7 +101,7 @@ No local Python, `uv`, or `func` CLI needed — the function code is pulled from
 
 #### What the template creates
 
-Storage Account (with queue / table / blob containers), Log Analytics + Application Insights, **Azure AI Search (Basic)**, **Microsoft Foundry / Azure AI Services** multi-service (hosts **Azure OpenAI `text-embedding-3-large`** embeddings + **`gpt-4o`** image captioning model deployments), **Document Intelligence** (Layout), **Key Vault**, Flex Consumption plan, and the Function App — plus every RBAC assignment on the Function's managed identity. No "pre-existing resource" paste-in.
+Storage Account (with queue / table / blob containers), Log Analytics + Application Insights, **Azure AI Search (Basic)**, **Microsoft Foundry / Azure AI Services** multi-service (hosts **Azure OpenAI `text-embedding-3-large`** embeddings + **`gpt-4o`** image captioning model deployments + **Azure Speech Fast Transcription** for video files — all three share the same endpoint and managed-identity RBAC role), **Document Intelligence** (Layout), **Key Vault**, Flex Consumption plan, and the Function App — plus every RBAC assignment on the Function's managed identity. No "pre-existing resource" paste-in.
 
 In addition, the template **always** creates a tiny dedicated storage account named `<baseName>ds<hash>` (suffix `ds` = "deployment scripts"), tagged `purpose=arm-deployment-scripts`, with `allowSharedKeyAccess: true`. The two ARM `deploymentScripts` (`createSearchIndex`, `publishCode`) need a key-enabled storage account to upload their script payload — without this, deployment fails with `KeyBasedAuthenticationNotPermitted` in tenants that enforce the *"Storage accounts should prevent shared key access"* Azure Policy. If your tenant has that policy in Deny mode, add a single **policy exemption** scoped to resources matching `tags['purpose'] == 'arm-deployment-scripts'` (or scope the exemption to this one resource by name). The application data path (the main storage account, BYO or template-created) does **not** rely on shared keys — only this small `*ds*` account does.
 
@@ -134,6 +133,7 @@ The template asks for **two values** — everything else is inferred, defaulted,
 | `sharePointSiteUrl` | ✅ | Full URL of the SharePoint site to monitor. |
 | `location` | optional | Azure region (default `resourceGroup().location`). Azure OpenAI (`text-embedding-3-large` / `gpt-4o`) is available in Canada Central and most Azure regions — check [Microsoft Learn](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models) for the latest availability. |
 | `enableSecurityTrimming` | optional | **Default `false`** — Copilot Studio queries AI Search directly. Flip to `true` only as part of the [Extending with Per-User Security Trimming](#extending-with-per-user-security-trimming) walkthrough. |
+| `speechLocale` | optional | BCP-47 locale for Azure Speech video transcription (default `en-US`). Adjust to the primary spoken language in your video content (e.g. `fr-FR`, `es-ES`). Video files are always included in `INDEXED_EXTENSIONS`; remove the video extensions from that app setting post-deploy to disable video indexing entirely. |
 | `apiAudience` | optional | Used **only** when `enableSecurityTrimming = true`. Supply a pre-created Entra app clientId (GUID or `api://<guid>`) when the deployer lacks `Application Administrator`; leave empty otherwise. |
 | `existingStorageAccountResourceId` | optional | **Bring-your-own (BYO) storage.** Empty (default) = template creates a new storage account. Supply the full ARM resource ID (`/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Storage/storageAccounts/<name>`) to reuse an existing storage account — useful in tenants whose Azure Policy forbids creating new storage accounts. See [Bring your own storage](#bring-your-own-storage-byo) below for prerequisites. |
 
@@ -308,7 +308,7 @@ Every operational knob lives as an **app setting** on the Function App — chang
 | `VECTORISE_CONCURRENCY` / `MULTIMODAL_MAX_IN_FLIGHT` | `8` / `8` | Raise for faster initial bulk loads (subject to Azure OpenAI TPM quota). |
 | `AZURE_OPENAI_EMBEDDING_MODEL` | `text-embedding-3-large` | Override if you deploy under a different deployment name. |
 | `AZURE_OPENAI_VISION_MODEL` | `gpt-4o` | Override if you deploy under a different deployment name. Set empty to skip image captioning (images will be indexed only if neighbour text is available). |
-| `CONTENT_UNDERSTANDING_ENDPOINT` | *(empty — video disabled)* | Set to the Foundry endpoint to enable video indexing via `prebuilt-videoSearch`. Region must support Content Understanding. |
+| `SPEECH_LOCALE` | `en-US` | BCP-47 locale for Azure Speech Fast Transcription. Change to match the primary spoken language of your video content. Video files are skipped if the video extensions are removed from `INDEXED_EXTENSIONS`. |
 | `BACKUP_SCHEDULE` / `BACKUP_RETENTION_DAYS` | `0 0 3 * * *` / `7` | Adjust nightly backup cadence + retention. |
 
 > **Schema-changing settings are not in this table.** The index schema (fields, vector profile, semantic config) lives in [infra/sharepoint-index.json](infra/sharepoint-index.json) and is provisioned by the Bicep deployment. Edit the JSON and re-run `deploy.ps1` — there is no longer an app-setting flag for index recreate.
@@ -407,8 +407,6 @@ The default deployment lets every authenticated agent user see every chunk in th
 
 This section is an **opt-in walkthrough** for adding that feature on top of the default deployment. It's longer because it touches Entra (app registration), Microsoft Graph (admin consent on `GroupMember.Read.All`), and Power Platform (a custom connection) — three places that the default flow doesn't go near.
 
-> **Architecture changes — extended diagram:** [images/sharepoint-connector-architecture-with-security-trimming.drawio](images/sharepoint-connector-architecture-with-security-trimming.drawio)
->
 > Instead of Copilot Studio querying AI Search directly (default), it calls a `/api/search` HTTP endpoint on the Function App with the signed-in user's delegated Entra token. The Function App validates the JWT, resolves the user's transitive group memberships through Graph, builds an OData `permission_ids/any(...)` filter, and runs the hybrid query against AI Search server-side. Only chunks the caller has SharePoint access to come back.
 
 #### What this opt-in adds
@@ -997,6 +995,9 @@ sharepoint-connector/
 │── multimodal_embeddings_client.py   # Azure AI Vision vectorize{Text,Image}
 │                                     # + bounded-concurrency semaphore + 429
 │                                     #   cool-off
+│── speech_transcription_client.py    # Azure Speech Fast Transcription wrapper
+│                                     # PyAV audio extract → 16kHz WAV → REST
+│                                     # POST → ~60s timestamped TEXT blocks
 │── chunker.py                        # chunk_text / chunk_blocks
 │── blocks.py                         # Block + LocationMetadata dataclasses
 │── search_client.py                  # AI Search data plane: upload_documents,
@@ -1050,6 +1051,7 @@ sharepoint-connector/
     ├── test_config.py                #   env-var resolution
     ├── test_doc_intelligence.py      #   Layout-result → Block mapping
     ├── test_document_processor.py    #   all extractors
+    ├── test_content_understanding.py #   Azure Speech transcription helpers
     ├── test_multimodal_client.py     #   vectorize + 429 + semaphore bound
     ├── test_processing_modes.py      #   full / since-date / since-last-run
     └── test_search_security.py       #   JWT + filter + identity cache
@@ -1078,9 +1080,10 @@ Each scheduled run follows these steps.
 2. **Poison protection.** `state_store.get_failure_count(item_id)` skips items that have already failed ≥5 times (message flows on to `sp-indexer-q-poison`).
 3. **Stream download.** `SharePointClient.download_file_to_path(...)` streams bytes from Graph to a tempfile — memory stays bounded no matter the file size.
 4. **Fetch permissions.** `get_item_permissions` returns the Entra object IDs that have access (from `grantedToV2` + `grantedToIdentitiesV2`). These become the chunk's `permission_ids`.
-5. **Extract blocks.** `extract_blocks(path, name, doc_intel=...)` routes:
+5. **Extract blocks.** `extract_blocks(path, name, doc_intel=..., video_transcriber=...)` routes:
    - Standalone image files → one `IMAGE` block with raw bytes.
    - PDF / DOCX / PPTX / XLSX with DocIntel enabled → `prebuilt-layout` → paragraph + table + figure blocks with bounding polygons.
+   - Video files (`.mp4`, `.mov`, `.avi`, `.mkv`, `.wmv`, `.m4v`, `.webm`) with `video_transcriber` supplied → PyAV extracts 16 kHz mono WAV in-memory → single synchronous POST to the **Azure Speech Fast Transcription API** (reuses `AZURE_OPENAI_ENDPOINT`) → phrase-level results grouped into `~60 s` `TEXT` blocks with `[MM:SS–MM:SS]` timestamps.
    - Everything else → hand-written extractor → one `TEXT` block per file.
 6. **Chunk.** `chunk_blocks(blocks, doc_id, chunk_size, chunk_overlap)`:
    - Text blocks are concatenated and split with overlap at paragraph / sentence boundaries.
@@ -1143,8 +1146,7 @@ Concrete playbooks for the high / medium severity items still open in the Well-A
 
 ### In this repository
 
-- **Architecture diagram**: [PNG](images/sharepoint-connector-architecture.png) · [draw.io source](images/sharepoint-connector-architecture.drawio)
-- **Video talk script**: [video-talk-script.md](video-talk-script.md)
+- **Architecture diagram**: [draw.io source](images/sharepoint-connector-architecture-updated.drawio)
 - **Copilot Studio topic YAML**: [copilot-studio-topics/OnKnowledgeRequested.yaml](copilot-studio-topics/OnKnowledgeRequested.yaml)
 - **Sites.Selected helper**: [infra/grant-site-permission.ps1](infra/grant-site-permission.ps1)
 - **Bicep template**: [infra/main.bicep](infra/main.bicep)

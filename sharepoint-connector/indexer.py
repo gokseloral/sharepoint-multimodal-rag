@@ -33,7 +33,7 @@ from typing import Any
 
 from chunker import TextChunk, chunk_blocks
 from config import AppConfig, ProcessingMode, load_config
-from content_understanding_client import ContentUnderstandingClient
+from speech_transcription_client import SpeechTranscriptionClient
 from doc_intelligence_client import DocIntelligenceClient
 from document_processor import extract_blocks
 from image_storage import ImageStore
@@ -140,7 +140,7 @@ def _process_single_file(
     stats: IndexerStats,
     content_path: str | None = None,
     doc_intel: DocIntelligenceClient | None = None,
-    content_understanding: ContentUnderstandingClient | None = None,
+    video_transcriber: SpeechTranscriptionClient | None = None,
     image_store: ImageStore | None = None,
 ) -> None:
     """Extract → chunk → embed → push."""
@@ -170,7 +170,7 @@ def _process_single_file(
             effective_path,
             sp_file.name,
             doc_intel=doc_intel,
-            content_understanding=content_understanding,
+            video_transcriber=video_transcriber,
         )
         if not blocks:
             logger.warning(f"No blocks extracted from {sp_file.name}, skipping")
@@ -425,9 +425,9 @@ def run_indexer(config: AppConfig | None = None) -> IndexerStats:
     search = SearchPushClient(config.search, config.multimodal)
     embedding = _make_embedding_client(config)
     doc_intel = DocIntelligenceClient(config.docintel) if config.docintel.enabled else None
-    content_understanding = (
-        ContentUnderstandingClient(config.content_understanding)
-        if config.content_understanding.enabled else None
+    video_transcriber = (
+        SpeechTranscriptionClient(config.speech_transcription)
+        if config.speech_transcription.enabled else None
     )
     image_store: ImageStore | None = None
     try:
@@ -511,7 +511,7 @@ def run_indexer(config: AppConfig | None = None) -> IndexerStats:
                     embedding,
                     stats,
                     doc_intel=doc_intel,
-                    content_understanding=content_understanding,
+                    video_transcriber=video_transcriber,
                     image_store=image_store,
                 )
             except Exception as e:  # noqa: BLE001
@@ -585,8 +585,8 @@ def run_indexer(config: AppConfig | None = None) -> IndexerStats:
         embedding.close()
         if doc_intel is not None:
             doc_intel.close()
-        if content_understanding is not None:
-            content_understanding.close()
+        if video_transcriber is not None:
+            video_transcriber.close()
         if image_store is not None:
             image_store.close()
 
@@ -600,14 +600,14 @@ _sp_client: SharePointClient | None = None
 _search_client: SearchPushClient | None = None
 _embedding_client = None   # OpenAIEmbeddingsClient | MultimodalEmbeddingsClient
 _doc_intel_client: DocIntelligenceClient | None = None
-_content_understanding_client: ContentUnderstandingClient | None = None
+_video_transcriber_client: SpeechTranscriptionClient | None = None
 _image_store: ImageStore | None = None
 
 
 def _get_worker_clients(cfg: AppConfig):
     """Build or return pooled per-worker clients."""
     global _sp_client, _search_client, _embedding_client, _doc_intel_client
-    global _content_understanding_client, _image_store
+    global _video_transcriber_client, _image_store
     with _client_pool_lock:
         if _sp_client is None:
             _sp_client = SharePointClient(cfg.entra, cfg.sharepoint)
@@ -617,8 +617,8 @@ def _get_worker_clients(cfg: AppConfig):
             _embedding_client = _make_embedding_client(cfg)
         if _doc_intel_client is None and cfg.docintel.enabled:
             _doc_intel_client = DocIntelligenceClient(cfg.docintel)
-        if _content_understanding_client is None and cfg.content_understanding.enabled:
-            _content_understanding_client = ContentUnderstandingClient(cfg.content_understanding)
+        if _video_transcriber_client is None and cfg.speech_transcription.enabled:
+            _video_transcriber_client = SpeechTranscriptionClient(cfg.speech_transcription)
         if _image_store is None:
             try:
                 _image_store = ImageStore(container=cfg.multimodal.images_container)
@@ -629,7 +629,7 @@ def _get_worker_clients(cfg: AppConfig):
         _search_client,
         _embedding_client,
         _doc_intel_client,
-        _content_understanding_client,
+        _video_transcriber_client,
         _image_store,
     )
 
@@ -637,7 +637,7 @@ def _get_worker_clients(cfg: AppConfig):
 def process_single_message(payload: dict[str, Any]) -> None:
     """Process one queue message: download + index a single file."""
     cfg = load_config()
-    sp, search, embedding, doc_intel, content_understanding, image_store = _get_worker_clients(cfg)
+    sp, search, embedding, doc_intel, video_transcriber, image_store = _get_worker_clients(cfg)
 
     drive_id = payload["drive_id"]
     item_id = payload["item_id"]
@@ -697,7 +697,7 @@ def process_single_message(payload: dict[str, Any]) -> None:
             stats,
             content_path=tmp_path,
             doc_intel=doc_intel,
-            content_understanding=content_understanding,
+            video_transcriber=video_transcriber,
             image_store=image_store,
         )
         logger.info(stats.summary())

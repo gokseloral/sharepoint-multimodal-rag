@@ -23,6 +23,7 @@ dependencies = [
     "odfpy>=1.4.1",
     "ebooklib>=0.18",
     "striprtf>=0.0.26",
+    "av>=13.0.0",
 ]
 
 [project.optional-dependencies]

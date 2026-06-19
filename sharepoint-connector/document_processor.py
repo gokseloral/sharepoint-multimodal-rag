@@ -540,16 +540,16 @@ def extract_blocks(
     path: str,
     filename: str,
     *,
-    doc_intel=None,                 # DocIntelligenceClient | None
-    content_understanding=None,     # ContentUnderstandingClient | None
+    doc_intel=None,              # DocIntelligenceClient | None
+    video_transcriber=None,      # SpeechTranscriptionClient | None
 ) -> list[Block]:
     """Return an ordered list of Blocks extracted from the file at `path`.
 
     Routing:
-      - Video files (.mp4, .mov, ...) with Content Understanding enabled →
-        prebuilt-videoSearch → TEXT blocks (transcript + per-segment summary).
+      - Video files (.mp4, .mov, ...) with a video_transcriber enabled →
+        Azure Speech Fast Transcription → TEXT blocks (timestamped transcript).
       - Standalone image files (.png, .jpg, ...) → one IMAGE block with raw bytes.
-        The indexer will embed the bytes directly via Azure AI Vision `vectorizeImage`.
+        The indexer embeds the bytes via Azure OpenAI gpt-4o + text-embedding-3-large.
       - PDF / DOCX / PPTX / XLSX with DocIntel enabled → Document Intelligence
         Layout → mixed TEXT + IMAGE blocks with reading order and bounding polygons.
       - Everything else, or when DocIntel is disabled → fall back to the legacy
@@ -557,17 +557,17 @@ def extract_blocks(
     """
     ext = PurePosixPath(filename).suffix.lower()
 
-    # -------- Route 0: video file — analyse with Content Understanding. --------
+    # -------- Route 0: video file — transcribe with Azure Speech. --------
     if ext in _VIDEO_EXTS:
-        if content_understanding is not None and getattr(content_understanding, "enabled", False):
-            blocks = content_understanding.extract_blocks(path, ext)
+        if video_transcriber is not None and getattr(video_transcriber, "enabled", False):
+            blocks = video_transcriber.extract_blocks(path, ext)
             if blocks:
                 return blocks
-            logger.warning(f"Content Understanding produced no blocks for {filename}")
+            logger.warning(f"Speech transcription produced no blocks for {filename}")
         else:
             logger.warning(
-                f"Skipping video {filename}: Content Understanding is not configured "
-                f"(set CONTENT_UNDERSTANDING_ENDPOINT)"
+                f"Skipping video {filename}: video transcriber is not configured "
+                f"(AZURE_OPENAI_ENDPOINT must be set and 'av>=13.0.0' installed)"
             )
         return []
 
