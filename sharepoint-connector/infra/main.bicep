@@ -102,7 +102,10 @@ var embeddingModelVersion = '1'
 var embeddingDeploymentName = 'text-embedding-3-large'
 var embeddingDimensions = 3072
 var visionModelName = 'gpt-4o'
-var visionModelVersion = '2024-11-20'
+// NOTE: gpt-4o GlobalStandard in Canada Central is only offered for version
+// 2024-08-06. Versions 2024-05-13 and 2024-11-20 are Provisioned-only there,
+// so requesting them with the GlobalStandard SKU silently fails the deployment.
+var visionModelVersion = '2024-08-06'
 var visionDeploymentName = 'gpt-4o'
 
 var imagesContainerName = 'images'

@@ -88,7 +88,7 @@
     "embeddingDeploymentName": "text-embedding-3-large",
     "embeddingDimensions": 3072,
     "visionModelName": "gpt-4o",
-    "visionModelVersion": "2024-11-20",
+    "visionModelVersion": "2024-08-06",
     "visionDeploymentName": "gpt-4o",
     "imagesContainerName": "images",
     "extractImages": true,
