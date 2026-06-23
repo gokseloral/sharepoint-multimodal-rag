@@ -214,7 +214,7 @@ class OpenAIEmbeddingsClient:
                     ],
                 },
             ],
-            "max_tokens": 512,
+            "max_completion_tokens": 2048,
         }
         result = self._post_json(
             self._url(self._vision_model, "chat/completions"),

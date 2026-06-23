@@ -101,13 +101,14 @@ var embeddingModelName = 'text-embedding-3-large'
 var embeddingModelVersion = '1'
 var embeddingDeploymentName = 'text-embedding-3-large'
 var embeddingDimensions = 3072
-var visionModelName = 'gpt-5.1-chat'
+var visionModelName = 'gpt-5.1'
 // NOTE: base gpt-4o is no longer offered with the GlobalStandard SKU in
-// Canada Central (only finetune/transcribe variants remain). The current-gen
-// multimodal chat model used for image captioning is gpt-5.1-chat, which has
+// Canada Central (only finetune/transcribe variants remain), and the
+// gpt-5.1-chat variant has entered deprecation (cannot be used for new
+// deployments). gpt-5.1 (full) is the current multimodal model with
 // GlobalStandard capacity in Canada Central and accepts image inputs.
 var visionModelVersion = '2025-11-13'
-var visionDeploymentName = 'gpt-5.1-chat'
+var visionDeploymentName = 'gpt-5.1'
 
 var imagesContainerName = 'images'
 var extractImages = true
