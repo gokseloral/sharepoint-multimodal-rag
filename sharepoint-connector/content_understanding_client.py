@@ -3,8 +3,7 @@ Azure AI Content Understanding — video analyzer (prebuilt-videoSearch).
 
 Turns a video file into ordered TEXT blocks (transcript + per-segment summary)
 so the existing multimodal pipeline can chunk, embed, and index it exactly like
-any document. This is the bridge that merges the Video RAG accelerator into the
-SharePoint connector: videos in SharePoint flow through Content Understanding
+any document: videos in SharePoint flow through Content Understanding
 instead of Document Intelligence, then re-join the unified index.
 
 REST API (Foundry / Azure AI Services endpoint):

@@ -2,16 +2,16 @@
 
 A single solution that indexes **text, image, and video** files from SharePoint into one **Azure AI Search** index, so a **Microsoft Copilot Studio** agent can ground its answers across an entire SharePoint workspace — documents, slides, photos, and training videos — with per-user security trimming.
 
-It merges two accelerators into one pipeline:
+It handles every content type in one pipeline:
 
-- **SharePoint Connector** — documents and images → unified multimodal (text + image) embeddings.
-- **Video RAG** — videos → Azure AI Content Understanding transcripts + per-segment summaries.
+- **Documents and images** — unified multimodal (text + image) embeddings.
+- **Video** — Azure AI Content Understanding transcripts + per-segment summaries.
 
-Both paths produce chunks in the **same vector space** and land in the **same index**, so retrieval works seamlessly across every content type.
+Every content type produces chunks in the **same vector space** and lands in the **same index**, so retrieval works seamlessly across documents, images, and video.
 
 ## How it works
 
-The merged solution runs as a queue-fed Azure Function (Flex Consumption). For each SharePoint file it picks the right extractor by file type, then everything converges on one chunk → embed → index path:
+The solution runs as a queue-fed Azure Function (Flex Consumption). For each SharePoint file it picks the right extractor by file type, then everything converges on one chunk → embed → index path:
 
 ```mermaid
 flowchart LR
@@ -39,20 +39,19 @@ All three are embedded with **Azure AI Vision multimodal** (1024-d, text + image
 
 ```
 .
-├── sharepoint-connector/   # THE merged solution (text + image + video indexer)
-│   ├── content_understanding_client.py   # video -> transcript/summary blocks (merged-in)
+├── sharepoint-connector/   # The solution (text + image + video indexer)
+│   ├── content_understanding_client.py   # video -> transcript/summary blocks
 │   ├── document_processor.py             # routes files by type, incl. video
 │   ├── indexer.py                        # orchestrates extract -> chunk -> embed -> index
 │   ├── infra/                            # Bicep (set enableVideoIndexing=true for video)
 │   └── ...
-├── video-rag/              # Original Video RAG accelerator (Logic App reference + sample videos)
 ├── LICENSE
 ├── CODE_OF_CONDUCT.md
 ├── SECURITY.md
 └── SUPPORT.md
 ```
 
-> The merged code solution lives in [sharepoint-connector](./sharepoint-connector). The [video-rag](./video-rag) folder is retained for reference (the original Logic App implementation) and for its sample test videos under [video-rag/video-samples](./video-rag/video-samples).
+> The solution lives in [sharepoint-connector](./sharepoint-connector).
 
 ## Getting started
 

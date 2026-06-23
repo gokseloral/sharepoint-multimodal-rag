@@ -66,7 +66,7 @@
     "useExistingStorage": "[not(empty(parameters('existingStorageAccountResourceId')))]",
     "existingStorageRg": "[if(variables('useExistingStorage'), split(parameters('existingStorageAccountResourceId'), '/')[4], '')]",
     "existingStorageName": "[if(variables('useExistingStorage'), last(split(parameters('existingStorageAccountResourceId'), '/')), '')]",
-    "packageReleaseUrl": "https://github.com/gokseloral/Copilot-Studio-and-Azure/releases/download/sharepoint-connector-latest/sharepoint-connector.zip",
+    "packageReleaseUrl": "https://github.com/gokseloral/sick-kids-ppdocs/releases/download/sharepoint-connector-latest/sharepoint-connector.zip",
     "searchIndexName": "sharepoint-index",
     "indexerSchedule": "0 0 * * * *",
     "backupSchedule": "0 0 3 * * *",
