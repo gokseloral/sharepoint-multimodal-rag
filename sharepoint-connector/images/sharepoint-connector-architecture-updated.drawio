@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e">
     <diagram id="sp-connector-arch-v3" name="SharePoint Connector Architecture v3 (Updated)">
-        <mxGraphModel dx="473" dy="431" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="1200" math="0" shadow="0">
+        <mxGraphModel dx="258" dy="284" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="1200" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -31,7 +31,7 @@
                 <mxCell id="appinsights" value="App Insights&#xa;+ Log Analytics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#68217A;fontColor=#FFFFFF;strokeColor=none;fontSize=10;fontStyle=1;arcSize=10;verticalAlign=middle;align=center;" parent="1" vertex="1">
                     <mxGeometry x="650" y="388" width="168" height="52" as="geometry"/>
                 </mxCell>
-                <mxCell id="openai" value="Azure OpenAI — PRIMARY&#xa;(Microsoft Foundry AIServices account)&#xa;&#xa;text-embedding-3-large (3072d)&#xa;All text chunks embedded here.&#xa;Used at ingest AND at query time&#xa;via the azureOpenAI vectorizer.&#xa;&#xa;gpt-4o — Image captioning&#xa;Images → caption + neighbour&#xa;context → embedded as text." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C45000;fontColor=#FFFFFF;strokeColor=none;fontSize=11;fontStyle=1;arcSize=10;verticalAlign=middle;align=center;shadow=1;" parent="1" vertex="1">
+                <mxCell id="openai" value="Azure OpenAI — PRIMARY&#xa;(Microsoft Foundry AIServices account)&#xa;&#xa;text-embedding-3-large (3072d)&#xa;All text chunks embedded here.&#xa;Used at ingest AND at query time&#xa;via the azureOpenAI vectorizer.&#xa;&#xa;gpt-5.1-chat — Image captioning&#xa;Images → caption + neighbour&#xa;context → embedded as text." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C45000;fontColor=#FFFFFF;strokeColor=none;fontSize=11;fontStyle=1;arcSize=10;verticalAlign=middle;align=center;shadow=1;" parent="1" vertex="1">
                     <mxGeometry x="1265" y="105" width="238" height="198" as="geometry"/>
                 </mxCell>
                 <mxCell id="docintel" value="Document Intelligence&#xa;(prebuilt-layout) — OPTIONAL&#xa;&#xa;Reading-order paragraphs,&#xa;tables, figures with bounding&#xa;boxes for PDF/DOCX/PPTX/XLSX.&#xa;Falls back to PyMuPDF / python-docx&#xa;when DOCINTEL_ENDPOINT is empty." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#005A9E;fontColor=#FFFFFF;strokeColor=#0078D4;strokeWidth=1;fontSize=10;fontStyle=1;arcSize=10;verticalAlign=middle;align=center;shadow=1;dashed=1;" parent="1" vertex="1">
@@ -120,7 +120,7 @@
                 <mxCell id="e_worker_openai" style="edgeStyle=orthogonalEdgeStyle;rounded=1;exitX=1;exitY=0.18;entryX=0;entryY=0.5;strokeColor=#C45000;strokeWidth=2;" parent="1" source="worker" target="openai" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_worker_openai_lbl" value="Embed text chunks&#xa;+ caption images (gpt-4o)" style="edgeLabel;html=1;align=center;verticalAlign=bottom;fontSize=10;fontColor=#C45000;fontStyle=1;" parent="e_worker_openai" connectable="0" vertex="1">
+                <mxCell id="e_worker_openai_lbl" value="Embed text chunks&#xa;+ caption images (gpt-5.1-chat)" style="edgeLabel;html=1;align=center;verticalAlign=bottom;fontSize=10;fontColor=#C45000;fontStyle=1;" parent="e_worker_openai" connectable="0" vertex="1">
                     <mxGeometry x="-0.1" relative="1" as="geometry">
                         <mxPoint y="-14" as="offset"/>
                     </mxGeometry>
