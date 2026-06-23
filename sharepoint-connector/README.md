@@ -62,7 +62,7 @@ Additional feature extensions like **Per-user security trimming** are shared und
 
 ## Architecture Diagram
 
-![SharePoint Connector Architecture](images/sick-kids-ppagent-solution-architecture.png)
+![SharePoint Connector Architecture](images/solution-architecture.png)
 
 Editable source (open in [draw.io](https://app.diagrams.net) or the VS Code Draw.io extension):
 - [images/sharepoint-connector-architecture-updated.drawio](images/sharepoint-connector-architecture-updated.drawio) — **current** diagram reflecting Azure OpenAI embeddings, Visio support, Azure Speech Fast Transcription for video, and the Metadata Column Filter.
@@ -144,7 +144,7 @@ Handled by the template itself:
 
 #### Automated Deployment
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fgokseloral%2Fsick-kids-ppdocs%2Fmaster%2Fsharepoint-connector%2Fdeploy%2Fazuredeploy.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fgokseloral%2Fsharepoint-multimodal-rag%2Fmaster%2Fsharepoint-connector%2Fdeploy%2Fazuredeploy.json)
 
 Clicking the button opens the Azure portal's custom-deployment form. Fill in the two required values (`baseName`, `sharePointSiteUrl`) — leave the rest at their defaults. The template provisions **everything** — Storage Account (+ queue / table / containers), Log Analytics + App Insights, Azure AI Search (Basic), Microsoft Foundry / Azure AI Services multi-service (hosts Azure OpenAI `text-embedding-3-large` + `gpt-4o` model deployments), Document Intelligence (Layout), Key Vault, Flex Consumption plan + Function App, and every RBAC assignment on the Function's managed identity. It also **pulls the latest CI-built function-app package** from GitHub Releases (`sharepoint-connector-latest`) via an ARM `deploymentScript` and writes it to the Function App's storage container — so the code is already running when the deployment finishes. No `func publish` step.
 

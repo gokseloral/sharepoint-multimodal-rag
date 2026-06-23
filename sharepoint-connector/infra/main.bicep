@@ -69,7 +69,7 @@ var existingStorageName = useExistingStorage ? last(split(existingStorageAccount
 // of deployers should use the official release; fork-users can edit this
 // line directly OR flip the app setting `WEBSITE_RUN_FROM_PACKAGE`-style
 // override post-deploy.
-var packageReleaseUrl = 'https://github.com/gokseloral/sick-kids-ppdocs/releases/download/sharepoint-connector-latest/sharepoint-connector.zip'
+var packageReleaseUrl = 'https://github.com/gokseloral/sharepoint-multimodal-rag/releases/download/sharepoint-connector-latest/sharepoint-connector.zip'
 
 var searchIndexName = 'sharepoint-index'
 var indexerSchedule = '0 0 * * * *'            // every hour
