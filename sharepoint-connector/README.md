@@ -663,6 +663,52 @@ Invoke-RestMethod -Method Get `
     -Headers @{ "api-key" = $searchKey }
 ```
 
+#### Which files have been processed / indexed?
+
+The index stores one *chunk* per row; each source file is split into many chunks that share a `parent_id`. The `$count` above returns the **chunk** total, not the file total. To see the **distinct files** that made it into the index, group by `parent_id` and read back `title` (the file name) and `source_url` (the SharePoint URL):
+
+```powershell
+# A query key is enough for reads (admin key also works):
+$searchKey = az search query-key list --service-name $searchSvc --resource-group $rg --query "[0].key" -o tsv
+$resp = Invoke-RestMethod -Method Post `
+    -Uri "https://$searchSvc.search.windows.net/indexes/sharepoint-index/docs/search?api-version=2024-07-01" `
+    -Headers @{ "api-key" = $searchKey; "Content-Type" = "application/json" } `
+    -Body '{"search":"*","count":true,"top":1000,"select":"title,parent_id,source_url"}'
+
+Write-Host ("Chunks: {0}   Files: {1}" -f $resp.'@odata.count', ($resp.value.parent_id | Sort-Object -Unique).Count)
+$resp.value | Group-Object parent_id | ForEach-Object {
+    [pscustomobject]@{ Title = $_.Group[0].title; Chunks = $_.Count; Url = $_.Group[0].source_url }
+} | Sort-Object Title | Format-Table -AutoSize
+```
+
+> **Duplicate file names are normal.** Two rows titled `Main Document.pdf` are *different* source items (different `parent_id` / SharePoint folder), not duplicates of one file — disambiguate with the `Url` column. The index holds > 1000 chunks? Paginate with `"skip"` or facet instead; `top` caps at 1000 per request.
+
+Check a **single file**'s chunks (e.g. to confirm it was captioned/embedded):
+
+```powershell
+Invoke-RestMethod -Method Post `
+    -Uri "https://$searchSvc.search.windows.net/indexes/sharepoint-index/docs/search?api-version=2024-07-01" `
+    -Headers @{ "api-key" = $searchKey; "Content-Type" = "application/json" } `
+    -Body '{"search":"*","filter":"title eq ''Chylothorax algorithm.pdf''","select":"chunk_id,title,content_type,source_url"}'
+```
+
+To reconcile *expected vs. processed vs. failed* for a run, read the three state tables together — **`runState`** (per-run `expected/completed/failed` counters), **`failedFiles`** (files the worker gave up on after 5 dequeue retries), and **`watermark`** (the per-drive delta token, proves the dispatcher advanced):
+
+```powershell
+az storage entity query --account-name $storage --table-name runState    --auth-mode login --query "items | sort_by(@, &Timestamp) | reverse(@) | [:5].{run:RowKey, expected:expected, completed:completed, failed:failed}" -o table
+az storage entity query --account-name $storage --table-name failedFiles  --auth-mode login --query "items[].{file:RowKey, attempts:failure_count, error:last_error}" -o table
+```
+
+**A file is in SharePoint but missing from the index?** Walk it down the pipeline:
+
+| Stage | Where to look | What it means |
+|-------|---------------|---------------|
+| Was it picked up? | `traces` KQL: `message has "Dispatched run"` and the per-run count | Dispatcher saw it (passed the `METADATA_FILTERS` column filter and delta scan) |
+| Is it still queued? | `az storage message peek --queue-name sp-indexer-q` | Waiting for / mid-processing by a worker |
+| Did it fail terminally? | `failedFiles` table + `sp-indexer-q-poison` queue | Worker exhausted 5 retries — read `last_error` |
+| Did the worker error? | `exceptions` KQL (see below) filtered by file name | Extraction / captioning / upload exception |
+| Filtered out by design? | `METADATA_FILTERS` app setting | Column-value filter excluded it before enqueue |
+
 #### Application Insights queries (KQL)
 
 App Insights ingestion lags 1–3 minutes; if you're checking immediately after an event and see nothing, wait and retry. Run these via `az monitor app-insights query --app $ai --resource-group $rg --analytics-query "<kql>"` or paste them into the **Logs** blade on the App Insights resource in the portal.

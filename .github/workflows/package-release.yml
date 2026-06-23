@@ -1,0 +1,85 @@
+name: Build & publish function package
+
+# Rebuilds the Azure Functions deployment package and refreshes the rolling
+# `sharepoint-connector-latest` GitHub Release. That release asset is what the
+# Bicep / azuredeploy.json `publish-code` deploymentScript curls at deploy time
+# (see `var packageReleaseUrl` in sharepoint-connector/infra/main.bicep).
+#
+# The package is a *source* zip: Flex Consumption installs dependencies
+# server-side from requirements.txt, so no pip/oryx build happens here.
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'sharepoint-connector/**'
+      - '!sharepoint-connector/infra/**'
+      - '!sharepoint-connector/deploy/**'
+      - '!sharepoint-connector/images/**'
+      - '!sharepoint-connector/tests/**'
+      - '!sharepoint-connector/copilot-studio-topics/**'
+      - '!sharepoint-connector/**/*.md'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: package-release
+  cancel-in-progress: true
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: sharepoint-connector-latest
+      APP_DIR: sharepoint-connector
+      ZIP_PATH: ${{ runner.temp }}/sharepoint-connector.zip
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Stage runtime files
+        run: |
+          set -euo pipefail
+          STAGE="$RUNNER_TEMP/pkg"
+          mkdir -p "$STAGE"
+          cp -r "$APP_DIR/." "$STAGE/"
+
+          # Drop everything the runtime does not need (mirrors .funcignore plus
+          # the docs/infra/sample folders that live alongside the app code).
+          rm -rf "$STAGE/infra" "$STAGE/deploy" "$STAGE/images" \
+                 "$STAGE/tests" "$STAGE/copilot-studio-topics" \
+                 "$STAGE/.venv" "$STAGE/.python_packages" "$STAGE/.git"
+          find "$STAGE" -type d -name '__pycache__' -prune -exec rm -rf {} +
+          find "$STAGE" -type d -name '.pytest_cache' -prune -exec rm -rf {} +
+          rm -f "$STAGE"/*.md "$STAGE"/*.toml "$STAGE"/*.lock \
+                "$STAGE"/.env "$STAGE"/.env.sample "$STAGE"/.gitignore \
+                "$STAGE"/.funcignore "$STAGE"/video-talk-script*.txt
+
+          echo "=== package contents ==="
+          ( cd "$STAGE" && find . -type f | sort )
+
+          # Fail fast if the package is missing an essential file.
+          test -f "$STAGE/host.json"
+          test -f "$STAGE/requirements.txt"
+          test -f "$STAGE/function_app.py"
+
+      - name: Create package zip
+        run: |
+          set -euo pipefail
+          ( cd "$RUNNER_TEMP/pkg" && zip -r -X "$ZIP_PATH" . )
+          ls -l "$ZIP_PATH"
+
+      - name: Publish rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Recreate the rolling tag/release so it always points at this commit
+          # and carries a fresh asset.
+          gh release delete "$RELEASE_TAG" --cleanup-tag --yes || true
+          gh release create "$RELEASE_TAG" "$ZIP_PATH" \
+            --target "$GITHUB_SHA" \
+            --title "SharePoint Connector (latest)" \
+            --notes "Automated CI build of the function-app package from ${GITHUB_SHA}. Source zip; Flex Consumption installs dependencies server-side from requirements.txt."
