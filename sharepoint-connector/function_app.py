@@ -158,6 +158,7 @@ def _dispatch_files() -> None:
         items = sp.list_all_files(
             modified_since=modified_since,
             extensions=cfg.indexer.indexed_extensions,
+            root_paths=cfg.indexer.root_paths,
             metadata_filter=cfg.metadata_filter,
         )
     finally:

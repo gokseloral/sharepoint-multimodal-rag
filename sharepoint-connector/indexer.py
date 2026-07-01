@@ -650,6 +650,17 @@ def process_single_message(payload: dict[str, Any]) -> None:
         if last_mod_str else datetime.now(timezone.utc)
     )
 
+    # Cost optimization: skip unchanged files BEFORE downloading them. In FULL
+    # mode the dispatcher enqueues every file, but if a file is already indexed
+    # and its SharePoint lastModified matches what we indexed, there is no need
+    # to download it or run any AI extraction/embedding. This makes a full pass
+    # cost only the delta (new + modified files) while still guaranteeing
+    # completeness.
+    parent_id = _make_parent_id(drive_id, item_id)
+    if _is_fresh(search, parent_id, last_modified):
+        logger.info(f"Skipping (fresh, unchanged) before download: {name}")
+        return
+
     size = int(payload.get("size", 0))
     max_bytes = cfg.indexer.max_file_size_mb * 1024 * 1024
     if size > max_bytes:
@@ -664,7 +675,15 @@ def process_single_message(payload: dict[str, Any]) -> None:
     fd, tmp_path = tempfile.mkstemp(prefix="sp-", suffix=f"-{_safe_name(name)}", dir=tmpdir)
     os.close(fd)
     try:
-        bytes_written = sp.download_file_to_path(drive_id, item_id, tmp_path)
+        if cfg.sharepoint.published_versions_only:
+            bytes_written = sp.download_published_version_to_path(drive_id, item_id, tmp_path)
+            if bytes_written is None:
+                logger.warning(
+                    f"{name}: no published major version found; falling back to current content"
+                )
+                bytes_written = sp.download_file_to_path(drive_id, item_id, tmp_path)
+        else:
+            bytes_written = sp.download_file_to_path(drive_id, item_id, tmp_path)
         logger.info(f"Streamed {bytes_written} bytes for {name}")
 
         try:
